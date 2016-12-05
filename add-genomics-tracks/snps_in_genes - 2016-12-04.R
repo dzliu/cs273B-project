@@ -9,8 +9,10 @@ setwd('C:/Users/Ben/Documents/CS 273B project')
 # read in both files
 # All are from UCSC Genome Browser hg19 human assembly, knownGene table
 # Genes_all is 'Whole Gene' download option, Genes_exons is exons only.
+# Exons_coding is 'Coding exons' option.
 genes.bed = fread('Genes_all.txt')
 exons.bed = fread('Genes_exons.txt')
+exons_coding.bed = fread('Exons_coding.txt')
 # Only columns of interest are V1, V2, V3; rename as 'chrom','chromStart','chromEnd'; discard rest
 # generate separate table for each chromosome
 preproc.bed = function(bed.in) {
@@ -25,14 +27,17 @@ preproc.bed = function(bed.in) {
   return(beds.out)
 }
 genes.bed.proc = preproc.bed(genes.bed); exons.bed.proc = preproc.bed(exons.bed)
+coding.bed.proc = preproc.bed(exons_coding.bed)
 # 60 entries in these; mtDNA, X, Y, and some minor things, probably some kind of sequencing artifact.
 # Keep only autosomal chromosomes.
 aut.names = paste0('chr',1:22)
 genes.bed.proc = genes.bed.proc[names(genes.bed.proc) %in% aut.names]
 exons.bed.proc = exons.bed.proc[names(exons.bed.proc) %in% aut.names]
+coding.bed.proc = coding.bed.proc[names(coding.bed.proc) %in% aut.names]
 
 genes.bed.proc.clean = lapply(genes.bed.proc, clean.bed)
 exons.bed.proc.clean = lapply(exons.bed.proc, clean.bed)
+coding.bed.proc.clean = lapply(coding.bed.proc, clean.bed)
 
 # Extend genes.bed.proc.clean genes to have 5 kb flanking regions added
 genes.bed.padded = lapply(genes.bed.proc.clean,pad.genes,pad.size = 5000)
@@ -47,6 +52,9 @@ write.table(do.call(rbind,exons.bed.proc.clean), file = 'exons.bed',
 
 write.table(do.call(rbind,genes.bed.padded), file = 'genes_padded.bed', 
               row.names = FALSE, col.names = FALSE, quote = FALSE)
+
+write.table(do.call(rbind,coding.bed.proc.clean), file = 'exons_coding.bed', 
+            row.names = FALSE, col.names = FALSE, quote = FALSE)
 
 # Redo map.to.xmap
 files.split = tstrsplit(dir(),'.',fixed = TRUE)
@@ -67,4 +75,5 @@ xmaps.merged = do.call(rbind, xmaps)
 write.table(xmaps.merged[exons == 1,]$snp, file = 'SNPs_in_exons.txt', sep = '\t', col.names = FALSE, row.names = FALSE, quote = FALSE)
 write.table(xmaps.merged[genes == 1,]$snp, file = 'SNPS_in_genes.txt', sep = '\t', col.names = FALSE, row.names = FALSE, quote = FALSE)
 write.table(xmaps.merged[genes_padded == 1,]$snp, file = 'SNPS_in_padded_genes.txt', sep = '\t', col.names = FALSE, row.names = FALSE, quote = FALSE)
+write.table(xmaps.merged[exons_coding == 1,]$snp, file = 'SNPS_in_exons_coding.txt', sep = '\t', col.names = FALSE, row.names = FALSE, quote = FALSE)
 
