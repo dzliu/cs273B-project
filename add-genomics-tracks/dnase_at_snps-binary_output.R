@@ -20,6 +20,8 @@
 # else assign it 0.
 
 require(data.table)
+require(IRanges)
+
 map.to.xmap = function(map.file, bed.files, bed.names, xmap.file, chr.map = function(x) paste0('chr',x)) {
  if(missing(bed.names)) { bed.names = bed.files } # 'bed' is a general name for the class of files NarrowPeak is in.
  if(missing(xmap.file)) { xmap.file = paste0(strsplit(map.file,'.', fixed = TRUE)[[1]][1], '.xmap') }
@@ -29,7 +31,7 @@ map.to.xmap = function(map.file, bed.files, bed.names, xmap.file, chr.map = func
   for(i in 1:length(bed.files)) {
     print(bed.names[i])
     in.dat = fread(bed.files[i])
-    names.new = c('chrom','chromStart','chromEnd','name','score','strand','signalValue','pValue','qValue','peak')
+    names.new = c('chrom','chromStart','chromEnd','name','score','strand','signalValue','pValue','qValue','peak')[1:ncol(in.dat)]
     setnames(in.dat,names(in.dat),names.new)
     in.dat = in.dat[chrom == chr.to.use,]
     intervals = as.vector(rbind(in.dat$chromStart, in.dat$chromEnd))
@@ -43,5 +45,40 @@ map.to.xmap = function(map.file, bed.files, bed.names, xmap.file, chr.map = func
   # Note: output file keeps header names; we don't want to lose info about which cell type is which.
   # This is different from the original .map file format, which has no header.
   write.table(in.map, file = xmap.file, sep = '\t', row.names = FALSE, quote = FALSE)
+}
+
+# For 2016-12-04 work with gene .bed files, which UCSC browser provides with redundant entries
+# and possibly overlapping entries (and adding padding could introduce more overlaps)
+# REQUIRES THAT ONLY ONE CHROMOSOME IS PRESENT
+
+clean.bed = function(bed.in) {
+  if(length(unique(bed.in$chrom)) != 1) { 
+      print(paste0('Wrong number of chromosomes: ',unique(bed.in$chrom), collapse = ''))
+      return()
+  }
+  # Remove duplicate start-end pairs
+  interval.pairs = paste0(bed.in$chromStart,'-',bed.in$chromEnd)
+  interval.pairs.u = unique(interval.pairs)
+  interval.pairs.s = sapply(interval.pairs.u, function(x,y) which(y %in% x)[1], interval.pairs)
+  bed.in = bed.in[interval.pairs.s,]
+  bed.in.ir = IRanges::IRanges(start = bed.in$chromStart, end = bed.in$chromEnd)
+  bed.in.ir = IRanges::reduce(bed.in.ir)
+  ans = data.table(chrom = rep(bed.in$chrom[1],length(bed.in.ir)), 
+                   chromStart = IRanges::start(bed.in.ir),
+                   chromEnd = IRanges::end(bed.in.ir))
+  return(ans)
+}
+
+# intervals.in is a data.table with columns 'chrom', 'chromStart', 'chromEnd'
+# pad.size is a positive integer
+# Add padding of pad.size to each gene, at both start and end.
+# Some may technically reach beyond the start/end of the chromosome;
+# will leave these be, shouldn't hurt for what we're doing.
+# Use 'clean.bed' to resolve any overlaps introduced.
+pad.genes = function(intervals.in, pad.size) {
+  intervals.use = data.table::copy(intervals.in) # avoid goofy pass-by-reference behavior
+  intervals.use[,chromStart := chromStart - pad.size]
+  intervals.use[,chromEnd := chromEnd + pad.size]
+  return(clean.bed(intervals.use))
 }
 
