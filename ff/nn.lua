@@ -71,19 +71,19 @@ if params.platform == 'gpu' then
    criterion:cuda()
 end
 
-function csvload(filePath, separator, COLS)
+function csvload(filePath, separator, ROWS, COLS)
     local csvFile = io.open(filePath, 'r')  
     local header = csvFile:read()
-    local tbl = {}
+    local tbl = torch.Tensor(ROWS, COLS)
     local i = 0  
     for line in csvFile:lines('*l') do  
-        local row = {} --torch.Tensor(COLS)
+        -- local row = {} --torch.Tensor(COLS)
         i = i + 1
         local l = line:split(separator)
         for key, val in ipairs(l) do
-            row[key] = val
+            tbl[i][key] = val
         end
-        table.insert(tbl, row)
+        -- table.insert(tbl, row)
         -- print(#tbl)
     end
     csvFile:close()  
@@ -92,20 +92,19 @@ end
 
 -- data_inputs = csvigo.load({path = "../../data/AUTO_ENCODER/train_input_data_autoEncode.csv", mode = "large", separator = ","})
 -- data_labels = csvigo.load({path = "../../data/AUTO_ENCODER/train_label_data_autoEncode.txt", mode = "large", separator = " "})
+train_size = 6957
+data_inputs = csvload("../../data/AUTO_ENCODER/train_input_data_autoEncode.csv", ",", train_size, ninputs)
+data_labels = csvload("../../data/AUTO_ENCODER/train_label_data_autoEncode.txt", " ", train_size, noutputs)
 
-data_inputs = csvload("../../data/AUTO_ENCODER/train_input_data_autoEncode.csv", ",", ninputs)
-data_labels = csvload("../../data/AUTO_ENCODER/train_label_data_autoEncode.txt", " ", noutputs)
-
-val_inputs = csvload("../../data/AUTO_ENCODER/val_input_data_autoEncode.csv", ",", ninputs)
-val_labels = csvload("../../data/AUTO_ENCODER/val_label_data_autoEncode.txt", " ", noutputs)
-val_inputs = torch.Tensor(val_inputs)
-val_labels = torch.Tensor(val_labels)
-
-print("done")
+val_size = 772
+val_inputs = csvload("../../data/AUTO_ENCODER/val_input_data_autoEncode.csv", ",", val_size, ninputs)
+val_labels = csvload("../../data/AUTO_ENCODER/val_label_data_autoEncode.txt", " ", val_size, noutputs)
+-- val_inputs = torch.Tensor(val_inputs)
+-- val_labels = torch.Tensor(val_labels)
 
 counter = 0
 batch_size = params.batchsize
-shuffle = torch.randperm(#data_inputs)
+shuffle = torch.randperm(train_size)
 
 function nextBatch()
     local total = batch_size --math.min(batch_size, #discovery_list - (counter % #discovery_list))
@@ -113,9 +112,9 @@ function nextBatch()
     local batch_labels = torch.Tensor(total,noutputs)
 
     for i=1,total do
-        local idx = math.random(#data_inputs)
-        local bi = torch.Tensor(data_inputs[idx])
-        local bl = torch.Tensor(data_labels[idx])
+        local idx = math.random(train_size)
+        local bi = data_inputs[idx]
+        local bl = data_labels[idx]
         batch_inputs[i] = bi
         batch_labels[i] = bl
     end
@@ -155,7 +154,7 @@ feval = function(x_new)
     total_loss = total_loss + loss_x
     model:backward(inputs, criterion:backward(prediction, targets))
 
-    if math.floor(counter/#data_inputs) == epoch_counter + 1 then
+    if math.floor(counter/train_size) == epoch_counter + 1 then
         print('epoch:', epoch_counter, 'loss:', total_loss)
         if params.platform == 'gpu' then
            val_inputs = val_inputs:cuda()
