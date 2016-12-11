@@ -6,7 +6,7 @@ require 'image'
 require 'pl'
 require 'paths'
 require 'lfs'
-require 'csvigo'
+-- require 'csvigo'
 -- require 'cunn'
 
 cmd = torch.CmdLine()
@@ -71,8 +71,31 @@ if params.platform == 'gpu' then
    criterion:cuda()
 end
 
-data_inputs = csvigo.load({path = "../../data/AUTO_ENCODER/train_input_data_autoEncode.csv", mode = "large", separator = ","})
-data_labels = csvigo.load({path = "../../data/AUTO_ENCODER/train_label_data_autoEncode.txt", mode = "large", separator = " "})
+function csvload(filePath, separator, COLS)
+    local csvFile = io.open(filePath, 'r')  
+    local header = csvFile:read()
+    local tbl = {}
+    local i = 0  
+    for line in csvFile:lines('*l') do  
+        local row = torch.Tensor(COLS)
+        i = i + 1
+        local l = line:split(separator)
+        for key, val in ipairs(l) do
+            row[key] = val
+        end
+        table.insert(tbl, row)
+        -- print(#tbl)
+    end
+    csvFile:close()  
+    return tbl
+end
+
+-- data_inputs = csvigo.load({path = "../../data/AUTO_ENCODER/train_input_data_autoEncode.csv", mode = "large", separator = ","})
+-- data_labels = csvigo.load({path = "../../data/AUTO_ENCODER/train_label_data_autoEncode.txt", mode = "large", separator = " "})
+
+data_inputs = csvload("../../data/AUTO_ENCODER/train_input_data_autoEncode.csv", ",", ninputs)
+-- print(#data_inputs)
+data_labels = csvload("../../data/AUTO_ENCODER/train_label_data_autoEncode.txt", " ", noutputs)
 
 counter = 0
 batch_size = params.batchsize
