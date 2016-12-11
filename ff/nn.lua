@@ -77,7 +77,7 @@ function csvload(filePath, separator, COLS)
     local tbl = {}
     local i = 0  
     for line in csvFile:lines('*l') do  
-        local row = torch.Tensor(COLS)
+        local row = {} --torch.Tensor(COLS)
         i = i + 1
         local l = line:split(separator)
         for key, val in ipairs(l) do
@@ -94,8 +94,14 @@ end
 -- data_labels = csvigo.load({path = "../../data/AUTO_ENCODER/train_label_data_autoEncode.txt", mode = "large", separator = " "})
 
 data_inputs = csvload("../../data/AUTO_ENCODER/train_input_data_autoEncode.csv", ",", ninputs)
--- print(#data_inputs)
 data_labels = csvload("../../data/AUTO_ENCODER/train_label_data_autoEncode.txt", " ", noutputs)
+
+val_inputs = csvload("../../data/AUTO_ENCODER/val_input_data_autoEncode.csv", ",", ninputs)
+val_labels = csvload("../../data/AUTO_ENCODER/val_label_data_autoEncode.txt", " ", noutputs)
+val_inputs = torch.Tensor(val_inputs)
+val_labels = torch.Tensor(val_labels)
+
+print("done")
 
 counter = 0
 batch_size = params.batchsize
@@ -108,15 +114,8 @@ function nextBatch()
 
     for i=1,total do
         local idx = math.random(#data_inputs)
-        -- print(idx)
-        -- print(#data_inputs)
-        -- print(#data_labels)
-        -- print(data_inputs[idx])
-        -- print(data_labels[idx])
         local bi = torch.Tensor(data_inputs[idx])
         local bl = torch.Tensor(data_labels[idx])
-        -- table.insert(batch_inputs, bi)
-        -- table.insert(batch_labels, bl)
         batch_inputs[i] = bi
         batch_labels[i] = bl
     end
@@ -158,6 +157,13 @@ feval = function(x_new)
 
     if math.floor(counter/#data_inputs) == epoch_counter + 1 then
         print('epoch:', epoch_counter, 'loss:', total_loss)
+        if params.platform == 'gpu' then
+           val_inputs = val_inputs:cuda()
+           val_labels = val_labels:cuda()
+        end
+        local val_prediction = model:forward(val_inputs)
+        local val_loss_x = criterion:forward(val_prediction, val_labels)
+        print('validation loss:', val_loss_x)
         local filename = string.format('%s/model.t7', params.savepath)
         torch.save(filename, model)
         epoch_counter = epoch_counter + 1
