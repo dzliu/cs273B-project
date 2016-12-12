@@ -24,6 +24,7 @@ cmd:option('-savepath','.','path to save the model')
 cmd:option('-loadpath','none','path to load the model')
 cmd:option('-ninputs',-1,'number of inputs')
 cmd:option('-noutputs',-1,'number of outputs')
+cmd:option('-dataset', 'AUTO_ENCODER', 'AUTO_ENCODER|DEP|MED_HEALTH')
 cmd:text()
 
 params = cmd:parse(arg)
@@ -64,7 +65,27 @@ else
     error('bad option parsms.model')
 end
 
-local criterion = nn.MSECriterion()
+local criterion
+
+if params.dataset == 'AUTO_ENCODER' then
+    train_size = 6957
+    val_size = 772
+    noutputs = 30
+    criterion = nn.MSECriterion()
+    suffix = "autoEncode"
+elseif params.dataset == 'DEP' then
+    train_size = 6940
+    val_size = 770
+    noutputs = 2
+    criterion = nn.CrossEntropyCriterion()
+    suffix = "dep"
+elseif params.dataset == 'MED_HEALTH' then
+    train_size = 6940
+    val_size = 771
+    noutputs = 5
+    criterion = nn.CrossEntropyCriterion()
+    suffix = "med"
+end
 
 if params.platform == 'gpu' then
    model:cuda()
@@ -72,8 +93,8 @@ if params.platform == 'gpu' then
 end
 
 function csvload(filePath, separator, ROWS, COLS)
+    print(filePath)
     local csvFile = io.open(filePath, 'r')  
-    local header = csvFile:read()
     local tbl = torch.Tensor(ROWS, COLS)
     local i = 0  
     for line in csvFile:lines('*l') do  
@@ -83,6 +104,31 @@ function csvload(filePath, separator, ROWS, COLS)
         for key, val in ipairs(l) do
             tbl[i][key] = val
         end
+        -- print(i)
+        -- table.insert(tbl, row)
+        -- print(#tbl)
+    end
+    csvFile:close()  
+    return tbl
+end
+
+function load_med_dep_labels(filePath, class, ROWS, COLS)
+    local csvFile = io.open(filePath, 'r')  
+    local tbl = torch.Tensor(ROWS) --, COLS)
+    local i = 0  
+    for line in csvFile:lines('*l') do  
+        -- local row = {} --torch.Tensor(COLS)
+        i = i + 1 
+        local l = tonumber(line)
+        -- if class == 'DEP' then
+        --     tbl[i][l+1] = 1
+        -- elseif class == 'MED_HEALTH' then
+        -- print(COLS, math.floor(math.log10(l)) + 1)
+        -- tbl[i][math.floor(math.log10(l)) + 1] = 1
+        tbl[i] = math.floor(math.log10(l)) + 1
+        -- else
+        --     error('bad class')
+        -- end
         -- table.insert(tbl, row)
         -- print(#tbl)
     end
@@ -92,13 +138,21 @@ end
 
 -- data_inputs = csvigo.load({path = "../../data/AUTO_ENCODER/train_input_data_autoEncode.csv", mode = "large", separator = ","})
 -- data_labels = csvigo.load({path = "../../data/AUTO_ENCODER/train_label_data_autoEncode.txt", mode = "large", separator = " "})
-train_size = 6957
-data_inputs = csvload("../../data/AUTO_ENCODER/train_input_data_autoEncode.csv", ",", train_size, ninputs)
-data_labels = csvload("../../data/AUTO_ENCODER/train_label_data_autoEncode.txt", " ", train_size, noutputs)
+data_inputs = csvload(string.format("../../data/%s/train_input_data_%s.csv", params.dataset, suffix), ",", train_size, ninputs)
+if params.dataset == 'AUTO_ENCODER' then
+    data_labels = csvload(string.format("../../data/%s/train_label_data_%s.txt", params.dataset, suffix), " ", train_size, noutputs)
+else
+    data_labels = load_med_dep_labels(string.format("../../data/%s/train_label_data_%s.txt", params.dataset, suffix), params.dataset, train_size, noutputs)
+end
 
-val_size = 772
-val_inputs = csvload("../../data/AUTO_ENCODER/val_input_data_autoEncode.csv", ",", val_size, ninputs)
-val_labels = csvload("../../data/AUTO_ENCODER/val_label_data_autoEncode.txt", " ", val_size, noutputs)
+print(data_labels[{{1,10}}])
+
+val_inputs = csvload(string.format("../../data/%s/val_input_data_%s.csv", params.dataset, suffix), ",", val_size, ninputs)
+if params.dataset == 'AUTO_ENCODER' then
+    val_labels = csvload(string.format("../../data/%s/val_label_data_%s.txt", params.dataset, suffix), " ", val_size, noutputs)
+else
+    val_labels = load_med_dep_labels(string.format("../../data/%s/val_label_data_%s.txt", params.dataset, suffix), params.dataset, val_size, noutputs)
+end
 -- val_inputs = torch.Tensor(val_inputs)
 -- val_labels = torch.Tensor(val_labels)
 
@@ -109,7 +163,12 @@ shuffle = torch.randperm(train_size)
 function nextBatch()
     local total = batch_size --math.min(batch_size, #discovery_list - (counter % #discovery_list))
     local batch_inputs = torch.Tensor(total,ninputs)
-    local batch_labels = torch.Tensor(total,noutputs)
+    local batch_labels
+    if params.dataset == 'AUTO_ENCODER' then 
+        batch_labels = torch.Tensor(total,noutputs)
+    else
+        batch_labels = torch.Tensor(total)
+    end
 
     for i=1,total do
         local idx = math.random(train_size)
@@ -136,6 +195,7 @@ feval = function(x_new)
     -- select a training batch
     time2 = clock()
     local inputs, targets = nextBatch()
+    -- print(targets)
     -- print(string.format("read time: %.2f", clock() - time2))
     if params.platform == 'gpu' then
        inputs = inputs:cuda()
@@ -150,6 +210,7 @@ feval = function(x_new)
 
 
     local prediction = model:forward(inputs)
+    -- print(prediction)
     local loss_x = criterion:forward(prediction, targets)
     total_loss = total_loss + loss_x
     model:backward(inputs, criterion:backward(prediction, targets))
