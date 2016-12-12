@@ -30,64 +30,6 @@ params = cmd:parse(arg)
 local clock = os.clock
 ninputs = params.ninputs
 
-if params.dataset == 'AUTO_ENCODER' then
-    train_size = 6957
-    val_size = 772
-    noutputs = 30
-    criterion = nn.MSECriterion()
-    suffix = "autoEncode"
-elseif params.dataset == 'DEP' then
-    train_size = 6931
-    val_size = 770
-    noutputs = 2
-    criterion = nn.CrossEntropyCriterion()
-    suffix = "dep"
-elseif params.dataset == 'MED_HEALTH' then
-    train_size = 6940
-    val_size = 771
-    noutputs = 5
-    criterion = nn.CrossEntropyCriterion()
-    suffix = "med"
-end
-
-if params.platform == 'gpu' then
-   print('==> switching to CUDA')
-   require 'cunn'
-   torch.setdefaulttensortype('torch.FloatTensor')
-end
-
-local model = nn.Sequential();  -- make a multi-layer perceptron
-HU1 = 3000;
-HU2 = 1500;
-HU3 = 800;
-HU4 = 400;
-HU5 = 200;
-
-if params.model == 'nn' then
-    -- model:add(nn.Reshape(ninputs))
-    model:add(nn.Linear(ninputs, HU1))
-    model:add(nn.ReLU())
-    model:add(nn.Linear(HU1, HU2))
-    model:add(nn.ReLU())
-    model:add(nn.Linear(HU2, HU3))
-    model:add(nn.ReLU())
-    model:add(nn.Linear(HU3, HU4))
-    model:add(nn.ReLU())
-    model:add(nn.Linear(HU4, HU5))
-    model:add(nn.ReLU())
-    model:add(nn.Linear(HU5, noutputs))
-    -- model:add(nn.LogSoftMax())
-elseif params.model == 'load' and params.loadpath ~= 'none' then
-    model = torch.load(params.loadpath)
-else
-    error('bad option parsms.model')
-end
-
-if params.platform == 'gpu' then
-   model:cuda()
-   criterion:cuda()
-end
-
 function csvload(filePath, separator, ROWS, COLS)
     print(filePath)
     local csvFile = io.open(filePath, 'r')  
@@ -132,11 +74,63 @@ function load_med_dep_labels(filePath, class, ROWS, COLS)
     return tbl
 end
 
+if params.dataset == 'AUTO_ENCODER' then
+    train_size = 6957
+    val_size = 772
+    noutputs = 30
+    suffix = "autoEncode"
+elseif params.dataset == 'DEP' then
+    train_size = 6931
+    val_size = 770
+    noutputs = 2
+    suffix = "dep"
+elseif params.dataset == 'MED_HEALTH' then
+    train_size = 6940
+    val_size = 771
+    noutputs = 5
+    suffix = "med"
+end
+
+if params.platform == 'gpu' then
+   print('==> switching to CUDA')
+   require 'cunn'
+   torch.setdefaulttensortype('torch.FloatTensor')
+end
+
+local model = nn.Sequential();  -- make a multi-layer perceptron
+HU1 = 3000;
+HU2 = 1500;
+HU3 = 800;
+HU4 = 400;
+HU5 = 200;
+
+if params.model == 'nn' then
+    -- model:add(nn.Reshape(ninputs))
+    model:add(nn.Linear(ninputs, HU1))
+    model:add(nn.ReLU())
+    model:add(nn.Linear(HU1, HU2))
+    model:add(nn.ReLU())
+    model:add(nn.Linear(HU2, HU3))
+    model:add(nn.ReLU())
+    model:add(nn.Linear(HU3, HU4))
+    model:add(nn.ReLU())
+    model:add(nn.Linear(HU4, HU5))
+    model:add(nn.ReLU())
+    model:add(nn.Linear(HU5, noutputs))
+    -- model:add(nn.LogSoftMax())
+elseif params.model == 'load' and params.loadpath ~= 'none' then
+    model = torch.load(params.loadpath)
+else
+    error('bad option parsms.model')
+end
+
 data_inputs = csvload(string.format("../../data/%s/train_input_data_%s.csv", params.dataset, suffix), ",", train_size, ninputs)
 if params.dataset == 'AUTO_ENCODER' then
     data_labels = csvload(string.format("../../data/%s/train_label_data_%s.txt", params.dataset, suffix), " ", train_size, noutputs)
 else
     data_labels = load_med_dep_labels(string.format("../../data/%s/train_label_data_%s.txt", params.dataset, suffix), params.dataset, train_size, noutputs)
+    print(data_labels:eq(1):sum())
+    print(data_labels:eq(2):sum())
 end
 
 -- print(data_labels[{{1,10}}])
@@ -147,6 +141,23 @@ else
     val_labels = load_med_dep_labels(string.format("../../data/%s/val_label_data_%s.txt", params.dataset, suffix), params.dataset, val_size, noutputs)
 end
 
+if params.dataset == 'AUTO_ENCODER' then
+    criterion = nn.MSECriterion()
+else
+    weights = torch.Tensor(noutputs)
+    print(noutputs)
+    for i=1,noutputs do
+        print(i)
+        weights[i] = 1/data_labels:eq(i):sum()
+    end
+    print(weights)
+    criterion = nn.CrossEntropyCriterion(weights)
+end
+
+if params.platform == 'gpu' then
+   model:cuda()
+   criterion:cuda()
+end
 
 
 counter = 0
@@ -223,9 +234,8 @@ feval = function(x_new)
         for i=1,val_size do
             confusion:add(val_p[i], val_labels[i])
         end
-        print(confusion.mat)
         confusion:updateValids()
-        print('validation accuracy', confusion.totalValid)
+        print('validation accuracy', confusion.totalValid, 'mean accuracy', confusion.averageValid)
         -- local filename = string.format('%s/model.t7', params.savepath)
         -- torch.save(filename, model)
         epoch_counter = epoch_counter + 1
