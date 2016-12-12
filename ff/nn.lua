@@ -185,7 +185,7 @@ function nextBatch()
             idx = math.random(train_size)
         else
             local output_idx = math.random(noutputs)
-            local idx = math.random(idx_tbl[output_idx]:nElement())
+            idx = math.random(idx_tbl[output_idx]:nElement())
             idx = idx_tbl[output_idx][idx]
         end
         local bi = data_inputs[idx]
