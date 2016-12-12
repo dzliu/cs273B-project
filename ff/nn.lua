@@ -23,14 +23,32 @@ cmd:option('-batchsize',50,'batch size')
 cmd:option('-savepath','.','path to save the model')
 cmd:option('-loadpath','none','path to load the model')
 cmd:option('-ninputs',-1,'number of inputs')
-cmd:option('-noutputs',-1,'number of outputs')
 cmd:option('-dataset', 'AUTO_ENCODER', 'AUTO_ENCODER|DEP|MED_HEALTH')
 cmd:text()
 
 params = cmd:parse(arg)
 local clock = os.clock
 ninputs = params.ninputs
-noutputs = params.noutputs
+
+if params.dataset == 'AUTO_ENCODER' then
+    train_size = 6957
+    val_size = 772
+    noutputs = 30
+    criterion = nn.MSECriterion()
+    suffix = "autoEncode"
+elseif params.dataset == 'DEP' then
+    train_size = 6931
+    val_size = 770
+    noutputs = 2
+    criterion = nn.CrossEntropyCriterion()
+    suffix = "dep"
+elseif params.dataset == 'MED_HEALTH' then
+    train_size = 6940
+    val_size = 771
+    noutputs = 5
+    criterion = nn.CrossEntropyCriterion()
+    suffix = "med"
+end
 
 if params.platform == 'gpu' then
    print('==> switching to CUDA')
@@ -63,28 +81,6 @@ elseif params.model == 'load' and params.loadpath ~= 'none' then
     model = torch.load(params.loadpath)
 else
     error('bad option parsms.model')
-end
-
-local criterion
-
-if params.dataset == 'AUTO_ENCODER' then
-    train_size = 6957
-    val_size = 772
-    noutputs = 30
-    criterion = nn.MSECriterion()
-    suffix = "autoEncode"
-elseif params.dataset == 'DEP' then
-    train_size = 6940
-    val_size = 770
-    noutputs = 2
-    criterion = nn.CrossEntropyCriterion()
-    suffix = "dep"
-elseif params.dataset == 'MED_HEALTH' then
-    train_size = 6940
-    val_size = 771
-    noutputs = 5
-    criterion = nn.CrossEntropyCriterion()
-    suffix = "med"
 end
 
 if params.platform == 'gpu' then
@@ -136,8 +132,6 @@ function load_med_dep_labels(filePath, class, ROWS, COLS)
     return tbl
 end
 
--- data_inputs = csvigo.load({path = "../../data/AUTO_ENCODER/train_input_data_autoEncode.csv", mode = "large", separator = ","})
--- data_labels = csvigo.load({path = "../../data/AUTO_ENCODER/train_label_data_autoEncode.txt", mode = "large", separator = " "})
 data_inputs = csvload(string.format("../../data/%s/train_input_data_%s.csv", params.dataset, suffix), ",", train_size, ninputs)
 if params.dataset == 'AUTO_ENCODER' then
     data_labels = csvload(string.format("../../data/%s/train_label_data_%s.txt", params.dataset, suffix), " ", train_size, noutputs)
@@ -146,15 +140,16 @@ else
 end
 
 -- print(data_labels[{{1,10}}])
-
 val_inputs = csvload(string.format("../../data/%s/val_input_data_%s.csv", params.dataset, suffix), ",", val_size, ninputs)
 if params.dataset == 'AUTO_ENCODER' then
     val_labels = csvload(string.format("../../data/%s/val_label_data_%s.txt", params.dataset, suffix), " ", val_size, noutputs)
 else
     val_labels = load_med_dep_labels(string.format("../../data/%s/val_label_data_%s.txt", params.dataset, suffix), params.dataset, val_size, noutputs)
 end
--- val_inputs = torch.Tensor(val_inputs)
--- val_labels = torch.Tensor(val_labels)
+
+local val_prediction = model:forward(val_inputs)
+local val_loss_x = criterion:forward(val_prediction, val_labels)
+
 
 counter = 0
 batch_size = params.batchsize
@@ -224,8 +219,17 @@ feval = function(x_new)
         local val_prediction = model:forward(val_inputs)
         local val_loss_x = criterion:forward(val_prediction, val_labels)
         print('validation loss:', val_loss_x)
-        local filename = string.format('%s/model.t7', params.savepath)
-        torch.save(filename, model)
+        _, val_p = torch.max(val_prediction, 2)
+        val_p = val_p:squeeze()
+        confusion = optim.ConfusionMatrix(noutputs)
+        for i=1,val_size do
+            confusion:add(val_p[i], val_labels[i])
+        end
+        print(confusion.mat)
+        confusion:updateValids()
+        print('validation accuracy', confusion.totalValid)
+        -- local filename = string.format('%s/model.t7', params.savepath)
+        -- torch.save(filename, model)
         epoch_counter = epoch_counter + 1
         total_loss = 0
     end
