@@ -145,13 +145,18 @@ if params.dataset == 'AUTO_ENCODER' then
     criterion = nn.MSECriterion()
 else
     weights = torch.Tensor(noutputs)
+    idx_tbl = {}
     print(noutputs)
     for i=1,noutputs do
         print(i)
         weights[i] = 1/data_labels:eq(i):sum()
+        idxx = torch.range(1, train_size)[data_labels:eq(i)]
+        print(idxx:size())
+        table.insert(idx_tbl, idxx)
     end
     print(weights)
-    criterion = nn.CrossEntropyCriterion(weights)
+
+    criterion = nn.CrossEntropyCriterion()
 end
 
 if params.platform == 'gpu' then
@@ -175,12 +180,21 @@ function nextBatch()
     end
 
     for i=1,total do
-        local idx = math.random(train_size)
+        local idx
+        if params.dataset = 'AUTO_ENCODER' then
+            idx = math.random(train_size)
+        else
+            local output_idx = math.random(noutputs)
+            local idx = math.random(idx_tbl[output_idx]:nElement())
+            idx = idx_tbl[output_idx][idx]
+        end
         local bi = data_inputs[idx]
         local bl = data_labels[idx]
         batch_inputs[i] = bi
         batch_labels[i] = bl
+        -- print(bl)
     end
+    -- print('done')
     -- print(counter, total, #discovery_list)
     counter = counter + total
     return batch_inputs, batch_labels
