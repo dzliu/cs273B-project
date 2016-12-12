@@ -147,8 +147,6 @@ else
     val_labels = load_med_dep_labels(string.format("../../data/%s/val_label_data_%s.txt", params.dataset, suffix), params.dataset, val_size, noutputs)
 end
 
-local val_prediction = model:forward(val_inputs)
-local val_loss_x = criterion:forward(val_prediction, val_labels)
 
 
 counter = 0
