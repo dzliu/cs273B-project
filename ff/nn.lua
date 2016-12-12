@@ -145,7 +145,7 @@ else
     data_labels = load_med_dep_labels(string.format("../../data/%s/train_label_data_%s.txt", params.dataset, suffix), params.dataset, train_size, noutputs)
 end
 
-print(data_labels[{{1,10}}])
+-- print(data_labels[{{1,10}}])
 
 val_inputs = csvload(string.format("../../data/%s/val_input_data_%s.csv", params.dataset, suffix), ",", val_size, ninputs)
 if params.dataset == 'AUTO_ENCODER' then
