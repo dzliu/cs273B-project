@@ -181,7 +181,7 @@ function nextBatch()
 
     for i=1,total do
         local idx
-        if params.dataset = 'AUTO_ENCODER' then
+        if params.dataset == 'AUTO_ENCODER' then
             idx = math.random(train_size)
         else
             local output_idx = math.random(noutputs)
